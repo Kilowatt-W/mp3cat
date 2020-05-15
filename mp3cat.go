@@ -8,6 +8,7 @@ package main
 
 import (
     "fmt"
+	"strings"
     "io"
     "os"
     "path"
@@ -19,8 +20,10 @@ import (
 )
 
 
-const version = "4.0.1"
+const version = "4.0.1_kw"
 
+var dest_mp3dir string
+var dest_mp3file string
 
 var helptext = fmt.Sprintf(`
 Usage: %s [FLAGS] [OPTIONS] [ARGUMENTS]
@@ -38,7 +41,11 @@ Usage: %s [FLAGS] [OPTIONS] [ARGUMENTS]
 
   Alternatively, an entire directory of .mp3 files can be merged:
 
-    $ mp3cat --dir /path/to/directory
+    $ mp3cat --dir "/path/to/directory"
+	
+  Variable can be used in output settings:
+
+    $ mp3cat --dir "/path/to/directory" -o #mp3dir#output.mp3  
 
 Arguments:
   [files]                 List of files to merge.
@@ -50,10 +57,14 @@ Options:
   -o, --out <path>        Output filepath. Defaults to 'output.mp3'.
 
 Flags:
+  -n, --name-meta		  Use -c input-file name for output file name (Merge_ is in front)
   -f, --force             Overwrite an existing output file.
   -h, --help              Display this help text and exit.
   -q, --quiet             Run in quiet mode. Only output error messages.
   -v, --version           Display the application's version number and exit.
+  
+Variables:
+  #mp3dir#				  used for output folder option
 `, filepath.Base(os.Args[0]))
 
 
@@ -66,6 +77,7 @@ func main() {
     parser.NewFlag("force f")
     parser.NewFlag("quiet q")
     parser.NewFlag("debug")
+	parser.NewFlag("name-meta n")	
     parser.NewString("out o", "output.mp3")
     parser.NewString("dir d")
     parser.NewString("interlace i")
@@ -74,6 +86,7 @@ func main() {
 
     // Make sure we have a list of files to merge.
     var files []string
+	
     if parser.Found("dir") {
         pattern := "*.[Mm][Pp]3"
         globs, err := filepath.Glob(path.Join(parser.GetString("dir"), pattern))
@@ -85,14 +98,22 @@ func main() {
             fmt.Fprintln(os.Stderr, "Error: no files found.")
             os.Exit(1)
         }
-        files = globs
+		files = globs
+		dest_mp3dir = parser.GetString("dir")
+		dest_mp3file = strings.Replace(parser.GetString("o"),"#mp3dir#",dest_mp3dir,-1)
+		parser.NewString("out o", dest_mp3file)
+		printLine()		
+		fmt.Printf("• Destination-DIR set to : %s \n",dest_mp3dir)
+		fmt.Printf("• Destination-MP3 set to : %s \n",dest_mp3file)
+		
     } else if parser.HasArgs() {
         files = parser.GetArgs()
     } else {
         fmt.Fprintln(os.Stderr, "Error: you must specify files to merge.")
         os.Exit(1)
     }
-
+	
+	
     // Are we copying the ID3 tag from the n-th input file?
     var tagpath string
     if parser.Found("copy-meta") {
@@ -102,7 +123,14 @@ func main() {
             os.Exit(1)
         }
         tagpath = files[tagindex]
+		dest_mp3file = dest_mp3dir+"Merged_"+filepath.Base(files[tagindex])
     }
+	
+	// Are we taking the name-meta for output file?
+    if parser.Found("name-meta") {
+       parser.NewString("out o", dest_mp3file)
+    }
+	
 
     // Are we interlacing a spacer file?
     if parser.Found("interlace") {
@@ -123,7 +151,8 @@ func main() {
         tagpath,
         files,
         parser.GetFlag("force"),
-        parser.GetFlag("quiet"))
+        parser.GetFlag("quiet"),
+		parser.GetFlag("debug"))
 }
 
 
@@ -153,7 +182,7 @@ func interlace(files []string, spacer string) []string {
 
 // Create a new file at the specified output path containing the merged
 // contents of the list of input files.
-func merge(outpath, tagpath string, inpaths []string, force, quiet bool) {
+func merge(outpath, tagpath string, inpaths []string, force, quiet bool,debug bool) {
 
     var totalFrames uint32
     var totalBytes uint32
@@ -268,10 +297,17 @@ func merge(outpath, tagpath string, inpaths []string, force, quiet bool) {
         addID3v2Tag(outpath, tagpath)
     }
 
-    // Print a count of the number of files merged.
+    // Print a count of the number of files merged and the output settings
     if !quiet {
         fmt.Printf("• %v files merged.\n", totalFiles)
-        printLine()
+		printLine()
+		if debug {
+			fmt.Printf("• Outpath set to : %s \n",outpath)		
+			fmt.Printf("• Tagpath set to : %s \n",tagpath)		
+			fmt.Printf("• Destination-DIR set to : %s \n",dest_mp3dir)
+			fmt.Printf("• Destination-MP3 set to : %s \n",dest_mp3file)
+			printLine()
+		}
     }
 }
 
