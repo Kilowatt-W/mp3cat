@@ -433,3 +433,23 @@ func printLine() {
         }
     }
 }
+
+func printCharLine(drawchar string) {
+    if terminal.IsTerminal(int(os.Stdout.Fd())) {
+        width, _, err := terminal.GetSize(int(os.Stdout.Fd()))
+        if err == nil {
+            if runtime.GOOS == "windows" {
+                for i := 0; i < width; i++ {
+                    fmt.Print(drawchar)
+                }
+                fmt.Println()
+            } else {
+                fmt.Print("\u001B[90m")
+                for i := 0; i < width; i++ {
+                    fmt.Print(drawchar)
+                }
+                fmt.Println("\u001B[0m")
+            }
+        }
+    }
+}
